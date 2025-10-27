@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi Ujian Esai AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .prose-custom { max-width: none; }
+        .prose-custom p { margin-top: 0.5em; margin-bottom: 0.5em; }
+        .prose-custom h3 { margin-bottom: 0.5em; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+        .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 40; }
+        .modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 50; }
+        #pdf-render-area {
+            position: absolute;
+            left: -9999px;
+            top: 0;
+            background: white;
+            padding: 20px;
+            width: 210mm; /* A4 width */
+        }
+        .toolbar-btn {
+            padding: 4px 10px;
+            border-radius: 6px;
+            background-color: #f0f0f0;
+            border: 1px solid #ddd;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+        .toolbar-btn:hover {
+            background-color: #e0e0e0;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+    <div class="w-full max-w-4xl bg-white rounded-2xl shadow-xl p-6 md:p-8 relative overflow-hidden">
+        
+        <button id="teacher-settings-btn" class="absolute top-4 right-4 text-gray-500 hover:text-blue-600 transition-colors" title="Pengaturan Guru">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+        </button>
+
+        <!-- Konten Utama (Start, Quiz, Results) -->
+        <div class="text-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">Ujian Esai Otomatis</h1>
+            <p class="text-gray-500 mt-1">Ditenagai oleh AI untuk Koreksi Cerdas</p>
+        </div>
+
+        <div id="start-screen">
+            <!-- Tampilkan Mata Pelajaran di layar awal -->
+            <div id="display-subject" class="text-center mb-4">
+                 <h2 class="text-2xl font-semibold text-blue-700">Mata Pelajaran: <span id="current-exam-subject">...</span></h2>
+            </div>
+
+            <div class="bg-blue-50 border-l-4 border-blue-500 text-blue-700 p-4 rounded-lg mb-6">
+                <p class="font-bold">Selamat Datang!</p>
+                <p>Silakan lengkapi identitas Anda untuk memulai ujian. Jawablah setiap pertanyaan dengan lengkap.</p>
+            </div>
+             <div class="bg-yellow-50 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded-lg mb-6">
+                <p class="font-bold">Perhatian Penting!</p>
+                <p>Selama ujian berlangsung, Anda **dilarang** untuk beralih ke tab lain, membuka jendela baru, atau meninggalkan halaman ini. Setiap pelanggaran akan menyebabkan ujian dihentikan secara otomatis.</p>
+            </div>
+            <div class="space-y-4">
+                <!-- Hapus input Mata Pelajaran dari sini -->
+                <input type="text" id="student-name" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" placeholder="Nama Lengkap Anda">
+                <input type="text" id="student-class" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" placeholder="Kelas (e.g., X-A)">
+                <button id="start-quiz-btn" class="w-full bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-blue-700 transition-all duration-300 shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Mulai Ujian
+                </button>
+            </div>
+            <div id="start-error" class="text-red-500 mt-2 text-center"></div>
+        </div>
+
+        <div id="quiz-screen" class="hidden">
+            <div class="flex justify-between items-center mb-4">
+                <h2 id="question-counter" class="text-xl font-semibold text-gray-700"></h2>
+                <div id="timer-display" class="text-xl font-bold text-red-600 bg-red-50 border border-red-200 px-3 py-1 rounded-lg"></div>
+                <div id="student-info" class="text-right text-sm text-gray-600"></div>
+            </div>
+            <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 min-h-[120px]">
+                <p id="question-text" class="text-lg text-gray-800 leading-relaxed"></p>
+            </div>
+            <div class="mt-4">
+                <div id="writing-toolbar" class="flex flex-wrap gap-2 mb-2 p-2 bg-gray-100 rounded-lg border">
+                    <button type="button" class="toolbar-btn" data-char="²">x²</button>
+                    <button type="button" class="toolbar-btn" data-char="³">x³</button>
+                    <button type="button" class="toolbar-btn" data-char="√">√</button>
+                    <button type="button" class="toolbar-btn" data-char="÷">÷</button>
+                    <button type="button" class="toolbar-btn" data-char="×">×</button>
+                    <button type="button" class="toolbar-btn" data-char="°">°</button>
+                    <button type="button" class="toolbar-btn" data-char="Δ">Δ</button>
+                    <button type="button" class="toolbar-btn" data-char="π">π</button>
+                    <button type="button" class="toolbar-btn" data-char="θ">θ</button>
+                    <button type="button" class="toolbar-btn" data-char="±">±</button>
+                    <button type="button" class="toolbar-btn" data-char="≥">≥</button>
+                    <button type="button" class="toolbar-btn" data-char="≤">≤</button>
+                </div>
+                <textarea id="student-answer" class="w-full px-4 py-3 border border-gray-300 rounded-lg h-40 resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" placeholder="Tulis jawaban Anda di sini..."></textarea>
+            </div>
+            <div class="mt-4">
+                <button id="submit-answer-btn" class="w-full bg-green-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-green-700 transition-all duration-300 shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                    Kirim Jawaban
+                </button>
+                <div id="grading-loader" class="hidden text-center mt-4 text-blue-600 font-medium">
+                    <div class="flex justify-center items-center">
+                        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        AI sedang mengoreksi jawaban Anda...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="results-screen" class="hidden">
+            <div class="text-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800">Hasil Ujian: <span id="result-student-name"></span></h2>
+                <p id="result-class-subject" class="text-gray-600"></p>
+                <p class="text-5xl font-extrabold text-blue-600 mt-2" id="total-score"></p>
+                <p class="text-gray-500">Skor Rata-rata</p>
+            </div>
+            <div id="results-details" class="space-y-4 max-h-[40vh] overflow-y-auto pr-2"></div>
+            <p id="save-status" class="text-center text-sm text-gray-500 mt-4"></p>
+            <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button id="download-pdf-btn" class="w-full bg-indigo-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-indigo-700 transition-all duration-300 shadow-md flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                    Unduh Hasil (PDF)
+                </button>
+                <button id="retake-quiz-btn" class="w-full bg-gray-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-gray-700 transition-all duration-300 shadow-md">
+                    Ulangi Ujian
+                </button>
+            </div>
+        </div>
+        
+        <!-- FOOTER YANG DIKUNCI - TETAP SEPERTI INI -->
+        <footer class="text-center text-sm text-gray-500 mt-8 pt-4 border-t border-gray-200">
+            <p class="flex items-center justify-center gap-1.5">
+                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd" />
+                </svg>
+                Innovation maker : Sofiyan Hadi <span class="ml-2 font-semibold">v1.3</span>
+            </p>
+        </footer>
+        <!-- AKHIR DARI FOOTER YANG DIKUNCI -->
+    </div>
+
+    <!-- Modal Pengaturan -->
+    <div id="settings-backdrop" class="modal-backdrop"></div>
+    <div id="settings-modal" class="modal w-11/12 max-w-lg bg-white rounded-xl shadow-2xl p-6 overflow-y-auto max-h-[90vh]">
+        <div id="pin-section">
+            <h3 class="text-xl font-bold text-center mb-4">Mode Guru</h3>
+            <p class="text-center text-gray-600 mb-4">Masukkan PIN untuk mengakses pengaturan.</p>
+            <input type="password" id="teacher-pin" class="w-full px-4 py-2 border rounded-lg text-center" placeholder="****">
+            <button id="submit-pin-btn" class="mt-4 w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">Masuk</button>
+            <p id="pin-error" class="text-red-500 text-center mt-2 text-sm"></p>
+        </div>
+        <div id="settings-section" class="hidden">
+             <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">Pengaturan Aplikasi</h3>
+                <button id="close-settings-btn" class="text-gray-500 hover:text-red-600 text-3xl font-bold">&times;</button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label for="teacher-name" class="block text-sm font-medium text-gray-700">Nama Guru (untuk PDF)</label>
+                    <input type="text" id="teacher-name" class="mt-1 w-full px-3 py-2 border rounded-md" placeholder="Contoh: Budi Santoso, S.Pd.">
+                </div>
+                <!-- INPUT MATA PELAJARAN BARU (dipindahkan dari layar siswa) -->
+                <div>
+                    <label for="exam-subject-setting" class="block text-sm font-medium text-gray-700">Mata Pelajaran Ujian</label>
+                    <input type="text" id="exam-subject-setting" class="mt-1 w-full px-3 py-2 border rounded-md" placeholder="Contoh: Bahasa Indonesia">
+                </div>
+                <!-- AKHIR INPUT MATA PELAJARAN BARU -->
+                <div>
+                    <label for="exam-material" class="block text-sm font-medium text-gray-700">Materi Ujian</label>
+                    <input type="text" id="exam-material" class="mt-1 w-full px-3 py-2 border rounded-md" placeholder="Contoh: Teks Prosedur">
+                </div>
+                <div>
+                    <label for="exam-duration" class="block text-sm font-medium text-gray-700">Durasi Ujian (menit)</label>
+                    <input type="number" id="exam-duration" class="mt-1 w-full px-3 py-2 border rounded-md" placeholder="Kosongkan untuk tanpa batas waktu" min="0">
+                </div>
+                <div>
+                    <label for="sheet-url" class="block text-sm font-medium text-gray-700">URL Google Sheet Aktif (Untuk Soal)</label>
+                    <input type="text" id="sheet-url" class="mt-1 w-full px-3 py-2 border rounded-md bg-gray-100" placeholder="https://docs.google.com/spreadsheets/d/.../edit" disabled>
+                    <p class="text-xs text-gray-500 mt-1">URL ini dimuat dari link aplikasi atau pengaturan fallback.</p>
+                </div>
+                <div>
+                    <label for="gemini-api-key" class="block text-sm font-medium text-gray-700">Gemini API Key</label>
+                    <input type="password" id="gemini-api-key" class="mt-1 w-full px-3 py-2 border rounded-md" placeholder="Masukkan API Key Gemini Anda">
+                </div>
+                <div>
+                    <label for="apps-script-url" class="block text-sm font-medium text-gray-700">URL Google Apps Script Aktif (Untuk Hasil)</label>
+                    <input type="text" id="apps-script-url" class="mt-1 w-full px-3 py-2 border rounded-md bg-gray-100" placeholder="https://script.google.com/macros/s/.../exec" disabled>
+                    <p class="text-xs text-gray-500 mt-1">URL ini dimuat dari link aplikasi atau pengaturan fallback.</p>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-3">
+                <button id="save-settings-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Simpan Pengaturan Lokal</button>
+            </div>
+             <div class="mt-4 border-t pt-4">
+                 <button id="reset-settings-btn" class="w-full bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700">Reset Pengaturan Lokal</button>
+                 <p class="text-xs text-gray-500 text-center mt-2">Gunakan ini jika pengaturan tidak termuat dengan benar.</p>
+            </div>
+
+            <!-- ===== BAGIAN GENERATOR LINK ===== -->
+            <div id="link-generator-section" class="mt-6 border-t-2 border-blue-500 pt-4">
+                <h3 class="text-lg font-bold text-gray-800 mb-3">Generator Link (Untuk Pemilik)</h3>
+                <p class="text-sm text-gray-600 mb-4">Gunakan ini untuk membuat link khusus bagi guru lain. Mereka harus menyediakan Sheet ID dan Apps Script URL mereka sendiri.</p>
+                <div class="space-y-3">
+                    <div>
+                        <label for="generate-sheet-id-input" class="block text-sm font-medium text-gray-700">Sheet ID atau URL Sheet (Guru Lain)</label>
+                        <input type="text" id="generate-sheet-id-input" class="mt-1 w-full px-3 py-2 border rounded-md" placeholder="Contoh: 1Xv...nb0">
+                    </div>
+                    <div>
+                        <label for="generate-script-url-input" class="block text-sm font-medium text-gray-700">URL Apps Script (Guru Lain)</label>
+                        <input type="text" id="generate-script-url-input" class="mt-1 w-full px-3 py-2 border rounded-md" placeholder="https://script.google.com/macros/s/...">
+                    </div>
+                    <button id="generate-link-btn" class="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">Buat Link</button>
+                    <div class="mt-3">
+                        <label for="generated-link-output" class="block text-sm font-medium text-gray-700">Link untuk Dibagikan:</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="generated-link-output" class="w-full px-3 py-2 border rounded-md bg-gray-100" readonly>
+                            <button id="copy-link-btn" class="bg-gray-200 px-4 py-2 rounded-lg hover:bg-gray-300 text-sm font-medium">Salin</button>
+                        </div>
+                        <p id="copy-status" class="text-green-600 text-sm mt-1 text-center"></p>
+                    </div>
+                </div>
+            </div>
+            <!-- ===== AKHIR BAGIAN GENERATOR LINK ===== -->
+        </div>
+    </div>
+    
+    <!-- Modal untuk notifikasi kecurangan -->
+    <div id="cheat-backdrop" class="modal-backdrop"></div>
+    <div id="cheat-modal" class="modal w-11/12 max-w-md bg-white rounded-xl shadow-2xl p-6 text-center">
+        <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-16 w-16 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.21 3.03-1.742 3.03H4.42c-1.532 0-2.492-1.696-1.742-3.03l5.58-9.92zM10 13a1 1 0 110-2 1 1 0 010 2zm-1-4a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1z" clip-rule="evenodd" />
+        </svg>
+        <h3 class="text-xl font-bold text-gray-800 mt-4">Ujian Dihentikan!</h3>
+        <p class="text-gray-600 mt-2">Aktivitas di luar jendela ujian terdeteksi. Sesuai peraturan, ujian Anda telah dihentikan secara otomatis.</p>
+        <button id="close-cheat-modal-btn" class="mt-6 w-full bg-red-600 text-white py-2 rounded-lg hover:bg-red-700">Lihat Hasil</button>
+    </div>
+
+    <!-- Area for PDF rendering -->
+    <div id="pdf-render-area"></div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const TEACHER_PIN = "1234"; // PIN Anda tetap
+
+        // --- Element Selectors (Utama) ---
+        const startScreen = document.getElementById('start-screen');
+        const quizScreen = document.getElementById('quiz-screen');
+        const resultsScreen = document.getElementById('results-screen');
+        const startQuizBtn = document.getElementById('start-quiz-btn');
+        // Hapus student-subject input
+        const studentNameInput = document.getElementById('student-name');
+        const studentClassInput = document.getElementById('student-class');
+        const startError = document.getElementById('start-error');
+        
+        const questionCounter = document.getElementById('question-counter');
+        const studentInfo = document.getElementById('student-info');
+        const questionText = document.getElementById('question-text');
+        const studentAnswerInput = document.getElementById('student-answer');
+        const submitAnswerBtn = document.getElementById('submit-answer-btn');
+        const gradingLoader = document.getElementById('grading-loader');
+        const writingToolbar = document.getElementById('writing-toolbar');
+        const timerDisplay = document.getElementById('timer-display');
+
+        const resultStudentName = document.getElementById('result-student-name');
+        const resultClassSubject = document.getElementById('result-class-subject');
+        const totalScoreEl = document.getElementById('total-score');
+        const resultsDetails = document.getElementById('results-details');
+        const retakeQuizBtn = document.getElementById('retake-quiz-btn');
+        const downloadPdfBtn = document.getElementById('download-pdf-btn');
+        const saveStatus = document.getElementById('save-status');
+        const currentExamSubjectDisplay = document.getElementById('current-exam-subject'); // Element untuk menampilkan Mapel
+
+        // --- Element Selectors (Pengaturan) ---
+        const teacherSettingsBtn = document.getElementById('teacher-settings-btn');
+        const settingsBackdrop = document.getElementById('settings-backdrop');
+        const settingsModal = document.getElementById('settings-modal');
+        const pinSection = document.getElementById('pin-section');
+        const teacherPinInput = document.getElementById('teacher-pin');
+        const submitPinBtn = document.getElementById('submit-pin-btn');
+        const pinError = document.getElementById('pin-error');
+        const settingsSection = document.getElementById('settings-section');
+        const closeSettingsBtn = document.getElementById('close-settings-btn');
+        const teacherNameInput = document.getElementById('teacher-name');
+        const examSubjectSettingInput = document.getElementById('exam-subject-setting'); // Input Mapel di pengaturan
+        const examMaterialInput = document.getElementById('exam-material');
+        const examDurationInput = document.getElementById('exam-duration');
+        const sheetUrlInput = document.getElementById('sheet-url');
+        const geminiApiKeyInput = document.getElementById('gemini-api-key');
+        const appsScriptUrlInput = document.getElementById('apps-script-url');
+        const saveSettingsBtn = document.getElementById('save-settings-btn');
+        const resetSettingsBtn = document.getElementById('reset-settings-btn');
+        
+        // --- Element Selectors (Cheat Modal) ---
+        const cheatBackdrop = document.getElementById('cheat-backdrop');
+        const cheatModal = document.getElementById('cheat-modal');
+        const closeCheatModalBtn = document.getElementById('close-cheat-modal-btn');
+
+        // --- Element Selectors (Generator Link Baru) ---
+        const generateSheetIdInput = document.getElementById('generate-sheet-id-input');
+        const generateScriptUrlInput = document.getElementById('generate-script-url-input');
+        const generateLinkBtn = document.getElementById('generate-link-btn');
+        const generatedLinkOutput = document.getElementById('generated-link-output');
+        const copyLinkBtn = document.getElementById('copy-link-btn');
+        const copyStatus = document.getElementById('copy-status');
+        
+        // --- State Variables ---
+        let questions = [];
+        let currentQuestionIndex = 0;
+        let studentName = "", studentClass = "";
+        let studentAnswers = [];
+        
+        // --- PENGATURAN DEFAULT (FALLBACK) - MILIK ANDA ---
+        let settings = { 
+            sheetUrl: "https://docs.google.com/spreadsheets/d/1XvwgOUD0DM1kMWKHbOfqkuckY7vIW5_E94sENKprnb0/edit", 
+            geminiApiKey: "AIzaSyCpXdeFbTEEgc_JrVxn3sMzQrHphEqhV7s", 
+            appsScriptUrl: "https://script.google.com/macros/s/AKfycbxF__BjdvtfdfXLEkjLFzMjPk-mJu7IXcuuARUOh3ZkBvZF_OhwDilDzuTfm1x7sbpwdQ/exec", 
+            teacherName: 'Sofiyan Hadi, S.Si.',
+            examSubject: 'Ujian Esai', // Default Mapel
+            examMaterial: '', 
+            examDuration: '90' 
+        };
+        let isQuizActive = false;
+        let timerInterval = null;
+
+        // --- Helper Function ---
+        const parseSheetUrl = (url) => {
+            try {
+                // Mencocokkan ID dari URL lengkap
+                const match = url.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+                if (match && match[1]) {
+                    return match[1];
+                }
+                // Jika tidak cocok, asumsikan itu sudah ID
+                if (url.length > 40) return null; // Filter sederhana jika bukan ID
+                return url; 
+            } catch (error) { 
+                return null; 
+            }
+        };
+
+        // --- Settings Management ---
+        const loadSettings = () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const sheetIdFromUrl = urlParams.get('sheetId');
+            const scriptUrlFromUrl = urlParams.get('scriptUrl');
+
+            let activeSettings = { ...settings }; // Mulai dengan fallback settings (milik Anda)
+
+            // 1. Timpa dengan data dari localStorage (Pengaturan lokal guru)
+            const savedSettingsJSON = localStorage.getItem('quizAppSettings');
+            if (savedSettingsJSON) {
+                const savedSettings = JSON.parse(savedSettingsJSON);
+                activeSettings.geminiApiKey = savedSettings.geminiApiKey || activeSettings.geminiApiKey;
+                activeSettings.teacherName = savedSettings.teacherName || activeSettings.teacherName;
+                activeSettings.examSubject = savedSettings.examSubject || activeSettings.examSubject; // Muat Mapel
+                activeSettings.examMaterial = savedSettings.examMaterial || activeSettings.examMaterial;
+                activeSettings.examDuration = savedSettings.examDuration || activeSettings.examDuration;
+            }
+
+            // 2. Timpa dengan data dari URL jika ada (prioritas tertinggi)
+            if (sheetIdFromUrl) {
+                activeSettings.sheetUrl = `https://docs.google.com/spreadsheets/d/${sheetIdFromUrl}/edit`;
+            }
+            if (scriptUrlFromUrl) {
+                activeSettings.appsScriptUrl = decodeURIComponent(scriptUrlFromUrl);
+            }
+            
+            settings = activeSettings; // Simpan pengaturan yang aktif
+
+            // Tampilkan pengaturan yang aktif ke dalam form
+            sheetUrlInput.value = settings.sheetUrl || '';
+            appsScriptUrlInput.value = settings.appsScriptUrl || '';
+            geminiApiKeyInput.value = settings.geminiApiKey || '';
+            teacherNameInput.value = settings.teacherName || '';
+            examSubjectSettingInput.value = settings.examSubject || 'Ujian Esai'; // Tampilkan Mapel di setting
+            examMaterialInput.value = settings.examMaterial || '';
+            examDurationInput.value = settings.examDuration || '90';
+
+            // TAMPILKAN MATA PELAJARAN DI LAYAR SISWA
+            currentExamSubjectDisplay.textContent = settings.examSubject || 'Belum Diatur';
+
+            // Jika ini adalah link untuk guru lain (ada parameter URL),
+            // sembunyikan generator link untuk mereka.
+            if (sheetIdFromUrl || scriptUrlFromUrl) {
+                const generatorSection = document.getElementById('link-generator-section');
+                if(generatorSection) {
+                    generatorSection.style.display = 'none';
+                }
+            }
+        };
+
+        const saveSettings = () => {
+            // Hanya simpan pengaturan yang aman di lokal
+            const settingsToSave = {
+                geminiApiKey: geminiApiKeyInput.value,
+                teacherName: teacherNameInput.value,
+                examSubject: examSubjectSettingInput.value, // Simpan Mata Pelajaran
+                examMaterial: examMaterialInput.value,
+                examDuration: examDurationInput.value
+            };
+            localStorage.setItem('quizAppSettings', JSON.stringify(settingsToSave));
+            
+            // Perbarui state saat ini
+            settings.geminiApiKey = settingsToSave.geminiApiKey;
+            settings.teacherName = settingsToSave.teacherName;
+            settings.examSubject = settingsToSave.examSubject; // Perbarui state Mapel
+            settings.examMaterial = settingsToSave.examMaterial;
+            settings.examDuration = settingsToSave.examDuration;
+
+            // Perbarui tampilan Mapel di layar siswa
+            currentExamSubjectDisplay.textContent = settings.examSubject || 'Belum Diatur';
+
+
+            alert('Pengaturan berhasil disimpan di browser ini!');
+            closeSettingsModal();
+        };
+        
+        const resetLocalSettings = () => {
+            if(confirm('Apakah Anda yakin ingin mereset semua pengaturan yang tersimpan di browser ini? (Sheet ID dan Script URL dari link tidak akan terhapus)')) {
+                localStorage.removeItem('quizAppSettings');
+                alert('Pengaturan lokal berhasil direset. Halaman akan dimuat ulang.');
+                window.location.search = window.location.search; 
+            }
+        };
+
+        const openSettingsModal = () => {
+            settingsBackdrop.style.display = 'block';
+            settingsModal.style.display = 'block';
+            pinSection.style.display = 'block';
+            settingsSection.style.display = 'none';
+            teacherPinInput.value = '';
+            pinError.textContent = '';
+        };
+
+        const closeSettingsModal = () => {
+            settingsBackdrop.style.display = 'none';
+            settingsModal.style.display = 'none';
+        };
+
+        const checkPin = () => {
+            if (teacherPinInput.value === TEACHER_PIN) {
+                pinSection.style.display = 'none';
+                settingsSection.style.display = 'block';
+            } else {
+                pinError.textContent = 'PIN salah. Coba lagi.';
+            }
+        };
+
+        // --- Fungsi Generator Link ---
+        const generateShareableLink = () => {
+            const sheetInput = generateSheetIdInput.value.trim();
+            const scriptUrl = generateScriptUrlInput.value.trim();
+
+            if (!sheetInput || !scriptUrl) {
+                alert('Harap isi kedua kolom untuk membuat link.');
+                return;
+            }
+
+            const sheetId = parseSheetUrl(sheetInput); 
+
+            if (!sheetId) {
+                alert('Format URL atau ID Google Sheet tidak valid.');
+                return;
+            }
+
+            const encodedScriptUrl = encodeURIComponent(scriptUrl);
+            const baseUrl = window.location.origin + window.location.pathname;
+            
+            const newLink = `${baseUrl}?sheetId=${sheetId}&scriptUrl=${encodedScriptUrl}`;
+            
+            generatedLinkOutput.value = newLink;
+            copyStatus.textContent = '';
+        };
+
+        const copyGeneratedLink = () => {
+            if (!generatedLinkOutput.value) {
+                alert('Buat link terlebih dahulu.');
+                return;
+            }
+            generatedLinkOutput.select();
+            
+            try {
+                // Menggunakan execCommand untuk kompatibilitas iframe
+                document.execCommand('copy');
+                copyStatus.textContent = 'Link berhasil disalin!';
+                setTimeout(() => { copyStatus.textContent = ''; }, 3000);
+            } catch (err) {
+                copyStatus.textContent = 'Gagal menyalin. Salin manual.';
+            }
+        };
+
+
+        // --- Exam Security, Timer, and Core Logic ---
+        const handleCheatingAttempt = () => {
+            if (!isQuizActive) return;
+            isQuizActive = false; 
+            removeRestrictionListeners();
+            cheatBackdrop.style.display = 'block';
+            cheatModal.style.display = 'block';
+            showResults(); 
+        };
+        const handleVisibilityChange = () => {
+            if (document.hidden && isQuizActive) {
+                handleCheatingAttempt();
+            }
+        };
+        const addRestrictionListeners = () => {
+            window.addEventListener('blur', handleCheatingAttempt);
+            document.addEventListener('visibilitychange', handleVisibilityChange);
+        };
+        const removeRestrictionListeners = () => {
+            window.removeEventListener('blur', handleCheatingAttempt);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+        const startTimer = () => {
+            if (timerInterval) clearInterval(timerInterval);
+            const durationInMinutes = parseInt(settings.examDuration, 10);
+            if (!durationInMinutes || durationInMinutes <= 0) {
+                timerDisplay.textContent = 'Tanpa Waktu';
+                return;
+            }
+            let timeLeftInSeconds = durationInMinutes * 60;
+            const updateDisplay = () => {
+                if (timeLeftInSeconds < 0) return;
+                const minutes = Math.floor(timeLeftInSeconds / 60);
+                const seconds = timeLeftInSeconds % 60;
+                timerDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                
+                if (timeLeftInSeconds <= 60 && timeLeftInSeconds > 0) {
+                    timerDisplay.classList.add('animate-pulse');
+                } else {
+                    timerDisplay.classList.remove('animate-pulse');
+                }
+            };
+            updateDisplay();
+            timerInterval = setInterval(() => {
+                timeLeftInSeconds--;
+                updateDisplay();
+                if (timeLeftInSeconds < 0) {
+                    clearInterval(timerInterval);
+                    timerDisplay.textContent = "Waktu Habis!";
+                    showResults();
+                }
+            }, 1000);
+        };
+        const fetchQuestions = async () => {
+            if (!settings.sheetUrl || !settings.geminiApiKey) {
+                startError.textContent = 'Pengaturan aplikasi belum lengkap (Sheet URL atau API Key).';
+                if(!settings.geminiApiKey) {
+                    startError.textContent = 'API Key Gemini belum diatur. Masuk ke Mode Guru untuk mengaturnya.';
+                }
+                return false;
+            }
+            
+            const sheetId = parseSheetUrl(settings.sheetUrl); 
+            if (!sheetId) {
+                startError.textContent = 'Format URL Google Sheet tidak valid.';
+                return false;
+            }
+            const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&cb=${new Date().getTime()}`;
+            try {
+                startQuizBtn.disabled = true;
+                startQuizBtn.textContent = 'Memuat Soal...';
+                const response = await fetch(csvUrl);
+                if (!response.ok) throw new Error('Gagal mengambil data. Pastikan sheet sudah di-"publish ke web" DAN akses link diatur ke "Siapa saja yang memiliki link".');
+                const csvText = await response.text();
+                const rows = csvText.split(/\r?\n/).slice(1);
+                questions = rows.map(row => {
+                    if (!row) return null;
+                    // Menggunakan regex untuk memisahkan koma yang tidak berada dalam tanda kutip ganda (handle data dengan koma di dalamnya)
+                    const columns = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); 
+                    return {
+                        question: (columns[0] || '').replace(/^"|"$/g, '').trim(), // Hapus tanda kutip ganda jika ada
+                        keyAnswer: (columns[1] || '').replace(/^"|"$/g, '').trim()
+                    };
+                }).filter(q => q && q.question);
+
+                if (questions.length === 0) throw new Error('Tidak ada soal yang ditemukan.');
+                
+                // Acak urutan soal
+                for (let i = questions.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [questions[i], questions[j]] = [questions[j], questions[i]];
+                }
+                return true;
+            } catch (error) {
+                startError.textContent = error.message;
+                return false;
+            } finally {
+                startQuizBtn.disabled = false;
+                startQuizBtn.textContent = 'Mulai Ujian';
+            }
+        };
+        
+        const startQuiz = async () => {
+            studentName = studentNameInput.value.trim();
+            studentClass = studentClassInput.value.trim();
+            // examSubject diambil dari settings
+
+            if (!studentName || !studentClass) {
+                startError.textContent = 'Nama Lengkap dan Kelas harus diisi.';
+                return;
+            }
+            
+            if (!settings.examSubject || settings.examSubject === 'Belum Diatur') {
+                startError.textContent = 'Mata Pelajaran belum diatur oleh guru. Hubungi guru Anda.';
+                return;
+            }
+
+            startError.textContent = '';
+            const questionsLoaded = await fetchQuestions();
+            if (!questionsLoaded) return;
+            
+            isQuizActive = true;
+            addRestrictionListeners();
+            currentQuestionIndex = 0;
+            studentAnswers = [];
+            
+            startScreen.classList.add('hidden');
+            resultsScreen.classList.add('hidden');
+            quizScreen.classList.remove('hidden');
+            
+            displayQuestion();
+            startTimer();
+        };
+        
+        const displayQuestion = () => {
+            const currentQuestion = questions[currentQuestionIndex];
+            questionCounter.textContent = `Soal ${currentQuestionIndex + 1} dari ${questions.length}`;
+            studentInfo.innerHTML = `Siswa: <strong>${studentName}</strong><br>Kelas: <strong>${studentClass}</strong>`;
+            questionText.textContent = currentQuestion.question;
+            studentAnswerInput.value = '';
+            studentAnswerInput.focus();
+        };
+        const gradeAnswer = async (question, keyAnswer, studentAnswer) => {
+            const apiKey = settings.geminiApiKey;
+            if (!apiKey) {
+                console.error("API Key Gemini tidak ditemukan.");
+                return { score: 0, feedback: "Koreksi AI gagal: API Key tidak diatur." };
+            }
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const systemPrompt = `Anda adalah seorang asisten guru AI yang cerdas dan objektif. Tugas Anda adalah menilai jawaban esai siswa berdasarkan kunci jawaban atau rubrik yang diberikan. Berikan skor dari 0 hingga 100 dan berikan umpan balik singkat dan konstruktif. Jawaban Anda HARUS dalam format JSON.`;
+            const userQuery = `Kunci Jawaban/Rubrik: "${keyAnswer}"\n\nJawaban Siswa: "${studentAnswer}"\n\nBerdasarkan informasi di atas, berikan skor dan umpan balik singkat.`;
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: { score: { type: "NUMBER" }, feedback: { type: "STRING" } },
+                        required: ["score", "feedback"]
+                    }
+                }
+            };
+            try {
+                // Implementasi Exponential Backoff
+                let response;
+                const maxRetries = 3;
+                for (let i = 0; i < maxRetries; i++) {
+                    response = await fetch(apiUrl, { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' }, 
+                        body: JSON.stringify(payload) 
+                    });
+                    if (response.ok) break;
+                    if (i < maxRetries - 1) {
+                        const delay = Math.pow(2, i) * 1000 + Math.floor(Math.random() * 1000); // 1s, 2s, 4s + jitter
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    } else {
+                        throw new Error('Gagal menghubungi API setelah beberapa kali mencoba.');
+                    }
+                }
+
+                if (!response.ok) { 
+                    const err = await response.json(); 
+                    throw new Error(`API Error: ${err.error.message}`); 
+                }
+                
+                const result = await response.json();
+                const jsonText = result.candidates[0].content.parts[0].text;
+                return JSON.parse(jsonText);
+            } catch (error) {
+                console.error("Error saat menghubungi Gemini API:", error);
+                let feedback = "Terjadi kesalahan saat mengoreksi jawaban.";
+                if (error.message.includes("API Key not valid")) {
+                    feedback = "Koreksi AI gagal: API Key tidak valid. Hubungi guru Anda.";
+                } else if (error.message.includes("API Error:")) {
+                    feedback = `Koreksi AI gagal: ${error.message}`;
+                }
+                return { score: 0, feedback: feedback };
+            }
+        };
+        const submitAnswer = async () => {
+            const studentAnswer = studentAnswerInput.value.trim();
+            if (!studentAnswer) { alert('Jawaban tidak boleh kosong.'); return; }
+            gradingLoader.classList.remove('hidden');
+            submitAnswerBtn.disabled = true;
+            studentAnswerInput.disabled = true;
+            
+            const currentQuestion = questions[currentQuestionIndex];
+            
+            // Menggunakan retry logic bawaan dari gradeAnswer
+            const result = await gradeAnswer(currentQuestion.question, currentQuestion.keyAnswer, studentAnswer);
+            
+            studentAnswers.push({ 
+                question: currentQuestion.question, 
+                answer: studentAnswer, 
+                score: result.score, 
+                feedback: result.feedback 
+            });
+            
+            gradingLoader.classList.add('hidden');
+            submitAnswerBtn.disabled = false;
+            studentAnswerInput.disabled = false;
+            
+            currentQuestionIndex++;
+            if (currentQuestionIndex < questions.length) {
+                displayQuestion();
+            } else {
+                showResults();
+            }
+        };
+        
+        const saveResultsToSheet = async (averageScore) => {
+            if (!settings.appsScriptUrl) {
+                saveStatus.textContent = 'URL Apps Script belum diatur. Hasil tidak disimpan.';
+                saveStatus.className = 'text-center text-sm text-yellow-600 mt-4';
+                return;
+            }
+            saveStatus.textContent = 'Menyimpan hasil ke Spreadsheet...';
+            saveStatus.className = 'text-center text-sm text-gray-500 mt-4';
+            
+            const payload = {
+                timestamp: new Date().toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' }),
+                studentName: studentName,
+                studentClass: studentClass, 
+                subject: settings.examSubject, // Menggunakan settings.examSubject
+                material: settings.examMaterial || 'Umum', 
+                averageScore: averageScore,
+                details: JSON.stringify(studentAnswers, null, 2)
+            };
+            
+            try {
+                // Fetch dengan mode 'no-cors' untuk Apps Script
+                await fetch(settings.appsScriptUrl, { 
+                    method: 'POST', 
+                    mode: 'no-cors', 
+                    headers: { 'Content-Type': 'text/plain' }, 
+                    body: JSON.stringify(payload) 
+                });
+                saveStatus.textContent = 'Hasil berhasil dikirim ke Spreadsheet.';
+                saveStatus.className = 'text-center text-sm text-green-600 mt-4';
+            } catch (error) {
+                console.error('Gagal mengirim hasil:', error);
+                saveStatus.textContent = 'Gagal mengirim hasil. (Hasil tetap tampil di sini)';
+                saveStatus.className = 'text-center text-sm text-red-600 mt-4';
+            }
+        };
+        
+        const showResults = () => {
+            if (timerInterval) clearInterval(timerInterval);
+            isQuizActive = false;
+            removeRestrictionListeners();
+            quizScreen.classList.add('hidden');
+            resultsScreen.classList.remove('hidden');
+            
+            resultStudentName.textContent = studentName;
+            resultClassSubject.textContent = `Kelas: ${studentClass} | Mapel: ${settings.examSubject || 'Ujian Esai'} | Materi: ${settings.examMaterial || 'Umum'}`;
+            
+            const totalScore = studentAnswers.reduce((sum, ans) => sum + ans.score, 0);
+            const averageScore = studentAnswers.length > 0 ? Math.round(totalScore / studentAnswers.length) : 0;
+            totalScoreEl.textContent = averageScore;
+            
+            resultsDetails.innerHTML = '';
+            if (studentAnswers.length === 0) {
+                 resultsDetails.innerHTML = '<p class="text-center text-gray-600">Tidak ada jawaban yang dikumpulkan.</p>';
+            }
+            
+            studentAnswers.forEach((ans, index) => {
+                const scoreColor = ans.score >= 75 ? 'bg-green-100 border-green-500' : ans.score >= 50 ? 'bg-yellow-100 border-yellow-500' : 'bg-red-100 border-red-500';
+                resultsDetails.innerHTML += `<div class="p-4 rounded-lg border-l-4 prose-custom ${scoreColor}"><h3 class="font-semibold text-gray-800">Soal ${index + 1}</h3><p class="text-gray-700">${ans.question}</p><p class="mt-2 p-2 bg-gray-50 rounded text-gray-600"><strong>Jawaban Anda:</strong> ${ans.answer || '(Tidak dijawab)'}</p><div class="mt-2 pt-2 border-t"><p class="font-bold">Skor: <span class="text-blue-700">${ans.score}</span> | Umpan Balik AI:</p><p class="text-sm italic text-gray-800">${ans.feedback}</p></div></div>`;
+            });
+            
+            saveResultsToSheet(averageScore);
+        };
+        
+        const downloadResultsAsPDF = async () => {
+            const { jsPDF } = window.jspdf;
+            const pdfRenderArea = document.getElementById('pdf-render-area');
+            const resultsClone = document.getElementById('results-screen').cloneNode(true);
+            resultsClone.querySelector('#save-status').remove();
+            resultsClone.querySelector('.grid').remove();
+            resultsClone.querySelector('#results-details').style.maxHeight = 'none';
+            resultsClone.querySelector('#results-details').style.overflowY = 'visible';
+            const signatureDiv = document.createElement('div');
+            signatureDiv.style.marginTop = '40px';
+            signatureDiv.style.textAlign = 'right';
+            signatureDiv.style.fontSize = '12px';
+            signatureDiv.style.width = '100%';
+            signatureDiv.innerHTML = `<div style="float: right; width: 200px;"><p>Lumajang, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p><p>Mengetahui,</p><p>Guru Mata Pelajaran</p><div style="height: 60px;"></div><p style="text-decoration: underline;"><strong>${settings.teacherName || '(..............................)'}</strong></p></div><div style="clear: both;"></div>`;
+            resultsClone.appendChild(signatureDiv);
+            pdfRenderArea.innerHTML = '';
+            pdfRenderArea.appendChild(resultsClone);
+            downloadPdfBtn.disabled = true;
+            downloadPdfBtn.innerHTML = 'Membuat PDF...';
+            try {
+                const canvas = await html2canvas(pdfRenderArea, { scale: 2, useCORS: true });
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const imgProps = pdf.getImageProperties(imgData);
+                const ratio = imgProps.height / imgProps.width;
+                const finalImgWidth = pdfWidth - 20; // A4 margins
+                let finalImgHeight = finalImgWidth * ratio;
+                let heightLeft = finalImgHeight;
+                let position = 10;
+                pdf.addImage(imgData, 'PNG', 10, position, finalImgWidth, finalImgHeight);
+                heightLeft -= (pdf.internal.pageSize.getHeight() - 20);
+                while (heightLeft > 0) {
+                    position = 10 - finalImgHeight + heightLeft; // Adjust position for new page
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'PNG', 10, position, finalImgWidth, finalImgHeight);
+                    heightLeft -= (pdf.internal.pageSize.getHeight() - 20);
+                }
+                pdf.save(`Hasil Ujian - ${studentName}.pdf`);
+            } catch (error) {
+                console.error("Gagal membuat PDF:", error);
+                alert("Maaf, terjadi kesalahan saat membuat file PDF.");
+            } finally {
+                pdfRenderArea.innerHTML = '';
+                downloadPdfBtn.disabled = false;
+                downloadPdfBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg> Unduh Hasil (PDF)';
+            }
+        };
+
+        // --- Event Listeners ---
+        retakeQuizBtn.addEventListener('click', () => window.location.reload());
+        startQuizBtn.addEventListener('click', startQuiz);
+        submitAnswerBtn.addEventListener('click', submitAnswer);
+        downloadPdfBtn.addEventListener('click', downloadResultsAsPDF);
+        teacherSettingsBtn.addEventListener('click', openSettingsModal);
+        closeSettingsBtn.addEventListener('click', closeSettingsModal);
+        settingsBackdrop.addEventListener('click', closeSettingsModal);
+        submitPinBtn.addEventListener('click', checkPin);
+        saveSettingsBtn.addEventListener('click', saveSettings);
+        resetSettingsBtn.addEventListener('click', resetLocalSettings);
+        
+        closeCheatModalBtn.addEventListener('click', () => {
+            cheatBackdrop.style.display = 'none';
+            cheatModal.style.display = 'none';
+            quizScreen.classList.add('hidden');
+            resultsScreen.classList.remove('hidden');
+        });
+
+        writingToolbar.addEventListener('click', (e) => {
+            if (e.target.matches('.toolbar-btn')) {
+                const char = e.target.dataset.char;
+                const start = studentAnswerInput.selectionStart;
+                const end = studentAnswerInput.selectionEnd;
+                const text = studentAnswerInput.value;
+                studentAnswerInput.value = text.substring(0, start) + char + text.substring(end);
+                studentAnswerInput.focus();
+                studentAnswerInput.selectionEnd = start + char.length;
+            }
+        });
+
+        // --- Event Listeners (Generator Link) ---
+        generateLinkBtn.addEventListener('click', generateShareableLink);
+        copyLinkBtn.addEventListener('click', copyGeneratedLink);
+
+        // --- Initial Load ---
+        loadSettings(); 
+    });
+</script>
+</body>
+</html>
